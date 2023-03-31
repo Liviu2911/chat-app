@@ -1,5 +1,30 @@
 @tailwind base;
-
 @tailwind components;
-
 @tailwind utilities;
+@import url("https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600&display=swap");
+
+* {
+  font-family: "Raleway", sans-serif;
+}
+
+body {
+  background-color: rgb(19, 19, 19);
+}
+
+.m-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.transition-3 {
+  transition: ease 0.3s;
+}
+.transition-5 {
+  transition: ease 0.5s;
+}
