@@ -11,65 +11,62 @@ import {
   query,
   where,
 } from "firebase/firestore"
+import {useCollectionData} from "react-firebase-hooks/firestore"
 
 type Data = {
   email: string
-  username: string
+  username?: string
 }
 
 interface Props {
-  data: Data
+  mydata?: Data | undefined
   setData: React.Dispatch<React.SetStateAction<Data>>
 }
 
-export default function SignIn({data, setData}: Props) {
-  const [showUsername, setShowUsername] = useState(false)
+export default function SignIn({mydata, setData}: Props) {
   const auth = getAuth(app)
+  const usersRef = collection(db, "users")
   const [user] = useAuthState(auth)
+  const [users] = useCollectionData(usersRef)
+  const [addUsername, setAddUsername] = useState(false)
 
   useEffect(() => {
-    setData({...data, email: user?.email || "craa"})
-
-    const justCheckin = async () => {
-      const collRef = collection(db, "users")
-      const q = query(collRef, where("email", "==", user?.email || ""))
-      const snapshot = await getCountFromServer(q)
-      const moreData = await getDocs(q)
-
-      moreData.forEach(item => {
-        console.log(item.data())
-      })
-
-      if (snapshot.data().count === 0) {
-        setTimeout(() => {
-          setShowUsername(true)
-        }, 1500)
-      } else {
-        setShowUsername(false)
-
-        setData({...data, username: user?.displayName || "hello"})
+    console.log(user)
+    if (user) {
+      const q = query(usersRef, where("email", "==", user.email))
+      const check = async () => {
+        const data = await getDocs(q)
+        const username: string[] = []
+        data.forEach(doc => username.push(doc.data().username))
+        setData({email: user.email || "", username: username[0]})
       }
-    }
-
-    if (user?.email !== undefined) {
-      justCheckin()
-      setTimeout(() => {
-        setShowUsername(true)
-      }, 1500)
-    } else {
-      setShowUsername(false)
+      check()
     }
   }, [user])
 
-  useEffect(() => {
-    setData({...data, username: localStorage.getItem("username") || ""})
-  }, [])
-
-  const Popup = () => {
-    const signin = (e: React.FormEvent<HTMLButtonElement>) => {
+  const Popup = ({setData}: Props) => {
+    const signin = async (e: React.FormEvent<HTMLButtonElement>) => {
       e.preventDefault()
       const provider = new GoogleAuthProvider()
-      signInWithPopup(auth, provider)
+
+      const checkEmail = async () => {
+        const data = await getDocs(usersRef)
+        let newShowUsername: boolean = true
+        data.forEach(doc => {
+          if (doc.data().email === user?.email && newShowUsername === true) {
+            newShowUsername = false
+            setData({
+              username: doc.data().username,
+              email: doc.data().email,
+            })
+            console.log(mydata)
+          }
+        })
+        setAddUsername(newShowUsername)
+      }
+      return signInWithPopup(auth, provider).then(() => {
+        checkEmail()
+      })
     }
 
     return (
@@ -81,62 +78,65 @@ export default function SignIn({data, setData}: Props) {
     )
   }
 
-  const AddUsername = ({setData, data}: Props) => {
+  const AddUsername = () => {
     const [username, setUsername] = useState("")
-    const [errormsg, setErrorMsg] = useState(false)
-    localStorage.setItem("username", username)
+    const [error, setError] = useState("")
+    const createAccount = async (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault()
 
-    const createAccount = async () => {
-      const collRef = collection(db, "users")
-      const q = query(collRef, where("username", "==", username))
-      const snapshot = await getCountFromServer(q)
+      const q = query(usersRef, where("username", "==", username))
+      const count = await getCountFromServer(q)
 
-      if (snapshot.data().count === 0) {
-        setData(mydata => ({
-          ...mydata,
-          username: localStorage.getItem("username") || username,
-        }))
+      if (username.length < 2) setError("short")
+      else if (count.data().count > 0) setError("username")
+      else {
+        setAddUsername(false)
 
-        addDoc(collection(db, "users"), {
-          email: data.email,
+        setData({username, email: user?.email || ""})
+        return await addDoc(usersRef, {
+          email: user?.email,
           username,
         })
-      } else {
-        setErrorMsg(true)
       }
     }
 
+    const ErrorMessage = () => {
+      return (
+        <div>
+          <p className="text-red-500 text-sm absolute w-[300px] left-[100px] text-center">
+            {error === "short"
+              ? "Username must be at least 2 characters long"
+              : "Username alredy exists"}
+          </p>
+        </div>
+      )
+    }
+
     return (
-      <div className="m-center mt-[20vh] sm:mt-[45vh] flex flex-col justify-around items-center gap-4 bg-stone-600 w-72 sm:w-96 h-32 rounded relative">
+      <form className="sm:w-[500px] sm:h-48 sm:mt-[10%] mt-[25%] w-[75%] h-32 m-center bg-stone-800 flex flex-col justify-around items-center rounded relative">
         <input
           type="text"
-          placeholder="username..."
+          placeholder="Enter an username..."
+          value={username}
           onChange={e => {
             setUsername(e.target.value)
-            setErrorMsg(false)
+            setError("")
           }}
-          className="focus:outline-none w-[75%] h-8 border-[1px] border-stone-500 bg-stone-700 rounded-md p-2 text-stone-400 focus:text-stone-300 transition placeholder:italic placeholder:text-stone-500"
+          className="w-[75%] h-8 rounded bg-stone-700 border-1 border-stone-500 focus:outline-none p-3 text-stone-300 placeholder:italic placeholder:text-stone-500"
         />
-        {errormsg && (
-          <p className="text-red-500 absolute text-xs">
-            username must be at least 2 characters long
-          </p>
-        )}
+        {error !== "" && <ErrorMessage />}
         <button
-          onClick={() =>
-            username.length > 1 ? createAccount() : setErrorMsg(true)
-          }
-          className="text-stone-400 w-[50%] h-8 bg-stone-700 border-[1px] border-stone-500 rounded transition hover:text-stone-200 hover:bg-stone-500"
+          type="submit"
+          onClick={e => createAccount(e)}
+          className="text-stone-300 text-xl hover:text-sky-700 transition-3 font-medium uppercase"
         >
           Create Account
         </button>
-      </div>
+      </form>
     )
   }
 
   return (
-    <div>
-      {showUsername ? <AddUsername setData={setData} data={data} /> : <Popup />}
-    </div>
+    <div>{addUsername ? <AddUsername /> : <Popup setData={setData} />}</div>
   )
 }
